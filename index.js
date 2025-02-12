@@ -1,121 +1,126 @@
-const form = document.querySelector("form"); //selector for form
-const resultsContainer = document.querySelector("#results"); //selector for container results
+const form = document.querySelector('form');
+const resultsContainer = document.querySelector('#results');
 
-//event submit for form
-form.addEventListener("submit", async (e) => {
-  try {
-    // prevent form for submit
-    e.preventDefault();
-    //destructing form elements
-    const {
-      prompt: { value: promptValue },
-      stream: { checked: streamValue },
-    } = form.elements;
-
-    //do not accept empty prompt
-    if (!promptValue) return alert("Please enter a prompt");
-    //set div value empty
-    resultsContainer.innerHTML = "";
-
-    //fetch with header
-    //POST
-    // 'Content-type': 'application/json'
-    // provider: 'open-ai',
-    // mode: 'development',
-    // body JSON.stringify
-    //model gpt4o
-    //stream
-
-    const response = await fetch(
-      "http://localhost:5050/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-type": "application/json",
-          provider: "open-ai",
-          mode: "development",
-        },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          stream: streamValue,
-          messages: [
+form.addEventListener('submit', async (e) => {
+    try {
+        // Prevent the form from submitting
+        e.preventDefault();
+        const {
+            prompt: { value: promptValue },
+            stream: { checked: streamValue },
+            submit,
+        } = form.elements;
+        // If the prompt value is empty, alert the user
+        if (!promptValue) return alert('Please enter a prompt');
+        // Clear the results container
+        resultsContainer.innerHTML = '';
+        // Disable the submit button
+        submit.disabled = true;
+        submit.classList.add(
+            'bg-gray-500',
+            'hover:bg-gray-500',
+            'cursor-not-allowed'
+        );
+        stream.disabled = true;
+        // Request
+        const response = await fetch(
+            'http://localhost:5050/api/v1/chat/completions',
             {
-              role: "system",
-              content:
-                "You are a software developer student that only speaks in rhymes",
-            },
-            {
-              role: "user",
-              content: promptValue,
-            },
-          ],
-        }),
-      }
-    );
-    // if response is not ok
-    if (!response.ok) {
-      const { error } = await response.json(); //destructing the error
-      throw new Error(error); //throw new Error
-    }
-    // streamValue is not empty
-    if (streamValue) {
-      //handle the stream
-      // console.log('response: ', response);
-      const reader = response.body.getReader(); // read the body
-      const decoder = new TextDecoder("utf-8"); // decode into utf-8
-      let dataResult = ""; //set empty
-      // console.log('reader: ', reader);
-
-      let isDone = false;
-      while (!isDone) {
-        // is the reader finishing to read
-        const result = await reader.read();
-        // check if is done to read and break
-        if (result.done) {
-          isDone = true;
-          break;
-        }
-        //decode chunk
-        // console.log('result: ', result);
-        const chunk = decoder.decode(result.value, { stream: true });
-        //break the new lines
-        // console.log('chunk: ', chunk);
-        const lines = chunk.split("\n");
-        //go each line
-        // console.log('lines: ', lines);
-        lines.forEach((line) => {
-          //if starts with data
-          if (line.startsWith("data: ")) {
-            // replace data with empty string
-            const jsonStr = line.replace("data:", "");
-            //pass to JSON
-            const data = JSON.parse(jsonStr);
-            // console.log('data: ', data);
-            //take content if exist
-            const content = data.choices[0]?.delta?.content;
-
-            //if some content exist
-            // console.log('content: ', content);
-            if (content) {
-              // add content to data result
-              dataResult += content;
-              //console the data result
-              console.log("dataResult: ", dataResult);
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    mode: 'development', // Set the mode to development to not send the request to Open AI for now
+                    provider: 'open-ai',
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4o',
+                    stream: streamValue,
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'You are a software developer', // This is the system message, it will control the behavior of the chatbot
+                        },
+                        {
+                            role: 'user',
+                            content: promptValue, // This is the user message, it will be the prompt for the chatbot
+                        },
+                    ],
+                }),
             }
-          }
-        });
-      }
-    } else {
-      // await  response json
-      const data = await response.json();
-      //console data
-      // console.log('data: ', data);
-      //if there exist a message
-      resultsContainer.innerHTML = data.message?.content;
+        );
+        if (!response.ok) {
+            // If the response is not ok, throw an error by parsing the JSON response
+            const { error } = await response.json();
+            throw new Error(error);
+        }
+        // Conditionally process the response depending on the value of `streamValue`
+        if (streamValue) {
+            // Process stream response
+            // Get the responses stream
+            const reader = response.body.getReader();
+            // Create a new TextDecoder
+            const decoder = new TextDecoder('utf-8');
+            // Variable to store the data result
+            let dataResult = '';
+            // Create a new paragraph element before the loop
+            const p = document.createElement('p');
+            resultsContainer.appendChild(p);
+            // Variable to check if the stream is done
+            let isDone = false;
+            // While the stream is not closed, i.e. done is false
+            while (!isDone) {
+                // Read the next chunk
+                const result = await reader.read();
+                // If the result is done, break out of the loop
+                if (result.done) {
+                    isDone = true;
+                    break;
+                }
+                // Decode the result
+                const chunk = decoder.decode(result.value, { stream: true });
+                // Split lines by new line, you can get more than one line per chunk
+                const lines = chunk.split('\n');
+                // Loop through each line
+                lines.forEach((line) => {
+                    // Check if the line starts with data:, that's how Open AI sends the data
+                    if (line.startsWith('data:')) {
+                        // Get the JSON string without the data: prefix
+                        const jsonStr = line.replace('data:', '');
+                        // Parse the JSON string
+                        const data = JSON.parse(jsonStr);
+                        // Get the content from the first choice
+                        const content = data.choices[0]?.delta?.content;
+                        // If there is content
+                        if (content) {
+                            dataResult += content;
+                            const md = marked.parse(dataResult);
+                            // Add the content to the paragraph element;
+                            p.innerHTML = md;
+                            Prism.highlightAll();
+                        }
+                    }
+                });
+            }
+        } else {
+            // Process response normally
+            const dataResult = await response.json();
+            // Output the response to the results container
+            resultsContainer.innerHTML = `<p>${marked.parse(
+                dataResult.message?.content
+            )}</p>`;
+            Prism.highlightAll();
+        }
+    } catch (error) {
+        // If an error occurs, log it to the console
+        console.error(error);
+    } finally {
+        // Enable the submit button
+        submit.disabled = false;
+        submit.classList.remove(
+            'bg-gray-500',
+            'hover:bg-gray-500',
+            'cursor-not-allowed'
+        );
+        stream.disabled = false;
     }
-    //error
-  } catch (error) {
-    //console error
-    console.error(error);
-  }
 });
